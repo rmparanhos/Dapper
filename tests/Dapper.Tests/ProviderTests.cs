@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Data;
 using System.Data.Common;
+using System.Threading.Tasks;
 using Dapper.ProviderTools;
 using Xunit;
 
@@ -22,6 +24,73 @@ namespace Dapper.Tests
             using var conn = new Microsoft.Data.SqlClient.SqlConnection();
             Test<Microsoft.Data.SqlClient.SqlBulkCopy>(conn);
         }
+
+#if MSSQLCLIENT
+        [Fact]
+        public void BulkCopy_WriteToServer_ForwardsSettings()
+        {
+            var provider = new MicrosoftSqlClientProvider();
+            using var conn = (Microsoft.Data.SqlClient.SqlConnection)provider.GetOpenConnection();
+
+            using var bcp = BulkCopy.Create(conn);
+            bcp.EnableStreaming = true;
+            bcp.BatchSize = 500;
+            bcp.BulkCopyTimeout = 60;
+
+            var raw = (Microsoft.Data.SqlClient.SqlBulkCopy)bcp.Wrapped;
+            Assert.True(raw.EnableStreaming);
+            Assert.Equal(500, raw.BatchSize);
+            Assert.Equal(60, raw.BulkCopyTimeout);
+        }
+
+        [Fact]
+        public void BulkCopy_WriteToServer_InsertsRows()
+        {
+            var provider = new MicrosoftSqlClientProvider();
+            using var conn = (Microsoft.Data.SqlClient.SqlConnection)provider.GetOpenConnection();
+            conn.Execute("CREATE TABLE #bcp_test (Id INT NOT NULL, Name NVARCHAR(100) NOT NULL)");
+
+            var dt = new DataTable();
+            dt.Columns.Add("Id", typeof(int));
+            dt.Columns.Add("Name", typeof(string));
+            dt.Rows.Add(1, "Alice");
+            dt.Rows.Add(2, "Bob");
+            dt.Rows.Add(3, "Carol");
+
+            using (var bcp = BulkCopy.Create(conn))
+            {
+                bcp.DestinationTableName = "#bcp_test";
+                bcp.WriteToServer(dt);
+            }
+
+            var count = conn.ExecuteScalar<int>("SELECT COUNT(1) FROM #bcp_test");
+            Assert.Equal(3, count);
+        }
+
+        [Fact]
+        public async Task BulkCopy_WriteToServerAsync_InsertsRows()
+        {
+            var provider = new MicrosoftSqlClientProvider();
+            using var conn = (Microsoft.Data.SqlClient.SqlConnection)provider.GetOpenConnection();
+            conn.Execute("CREATE TABLE #bcp_test_async (Id INT NOT NULL, Name NVARCHAR(100) NOT NULL)");
+
+            var dt = new DataTable();
+            dt.Columns.Add("Id", typeof(int));
+            dt.Columns.Add("Name", typeof(string));
+            dt.Rows.Add(1, "Alice");
+            dt.Rows.Add(2, "Bob");
+            dt.Rows.Add(3, "Carol");
+
+            using (var bcp = BulkCopy.Create(conn))
+            {
+                bcp.DestinationTableName = "#bcp_test_async";
+                await bcp.WriteToServerAsync(dt);
+            }
+
+            var count = conn.ExecuteScalar<int>("SELECT COUNT(1) FROM #bcp_test_async");
+            Assert.Equal(3, count);
+        }
+#endif
 
         [Fact]
         public void ClientId_SystemDataSqlClient()

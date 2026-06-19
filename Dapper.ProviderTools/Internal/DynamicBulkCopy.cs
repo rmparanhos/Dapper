@@ -22,6 +22,24 @@ namespace Dapper.ProviderTools.Internal
             set => _wrapped.DestinationTableName = value;
         }
 
+        public override bool EnableStreaming
+        {
+            get => _wrapped.EnableStreaming;
+            set => _wrapped.EnableStreaming = value;
+        }
+
+        public override int BatchSize
+        {
+            get => _wrapped.BatchSize;
+            set => _wrapped.BatchSize = value;
+        }
+
+        public override int BulkCopyTimeout
+        {
+            get => _wrapped.BulkCopyTimeout;
+            set => _wrapped.BulkCopyTimeout = value;
+        }
+
         public override object Wrapped => _wrapped;
 
         public override void AddColumnMapping(string sourceColumn, string destinationColumn)
@@ -39,12 +57,13 @@ namespace Dapper.ProviderTools.Internal
             => _wrapped.WriteToServer(source);
 
         public override Task WriteToServerAsync(DbDataReader source, CancellationToken cancellationToken)
-            => _wrapped.WriteToServer(source, cancellationToken);
+            => _wrapped.WriteToServerAsync(source, cancellationToken);
 
         public override Task WriteToServerAsync(DataTable source, CancellationToken cancellationToken)
-            => _wrapped.WriteToServer(source, cancellationToken);
+            => _wrapped.WriteToServerAsync(source, cancellationToken);
+
         public override Task WriteToServerAsync(DataRow[] source, CancellationToken cancellationToken)
-            => _wrapped.WriteToServer(source, cancellationToken);
+            => _wrapped.WriteToServerAsync(source, cancellationToken);
 
         protected override void Dispose(bool disposing)
         {

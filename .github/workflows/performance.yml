@@ -1,0 +1,88 @@
+name: Performance Benchmarks
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Dapper/**'
+      - 'Dapper.ProviderTools/**'
+      - 'benchmarks/**'
+  workflow_dispatch:
+    inputs:
+      compare_to:
+        description: 'Branch or SHA to compare against (leave empty to skip comparison)'
+        required: false
+        default: ''
+
+jobs:
+  benchmark:
+    name: BulkInsert Benchmarks
+    runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        ports:
+          - 1433/tcp
+        env:
+          ACCEPT_EULA: Y
+          SA_PASSWORD: "Password.1"
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Password.1' -No -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        run: dotnet build benchmarks/Dapper.Tests.Performance/Dapper.Tests.Performance.csproj -c Release -f net10.0
+
+      - name: Run BulkInsert benchmarks
+        run: |
+          dotnet run \
+            --project benchmarks/Dapper.Tests.Performance/Dapper.Tests.Performance.csproj \
+            --configuration Release \
+            --framework net10.0 \
+            -- \
+            --filter "*BulkInsert*" \
+            --exporters json \
+            --artifacts benchmark-results \
+            --job short \
+            --warmupCount 1 \
+            --iterationCount 5 \
+            --launchCount 1
+        env:
+          Main: "Server=localhost,${{ job.services.sqlserver.ports[1433] }};Database=tempdb;User Id=sa;Password=Password.1;TrustServerCertificate=True"
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: benchmark-results/
+          retention-days: 90
+
+      - name: Compare against baseline (if available)
+        if: github.event.inputs.compare_to != ''
+        run: |
+          echo "Baseline comparison against ${{ github.event.inputs.compare_to }} not yet automated."
+          echo "Download the artifact from that run and diff the JSON files manually."
+          echo "Future: integrate benchmarkdotnet-action or a custom comparison script here."
+
+      - name: Post summary
+        if: always()
+        run: |
+          REPORT=$(find benchmark-results -name '*.md' | head -1)
+          if [ -f "$REPORT" ]; then
+            echo "## BulkInsert Benchmark Results" >> $GITHUB_STEP_SUMMARY
+            cat "$REPORT" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No markdown report found in benchmark-results/" >> $GITHUB_STEP_SUMMARY
+          fi
