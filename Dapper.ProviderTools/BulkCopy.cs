@@ -22,7 +22,10 @@ namespace Dapper.ProviderTools
         {
             if (connection is null) return null;
             var type = connection.GetType();
-            var func = s_bcpFactory.GetOrAdd(type, CreateBcpFactory);
+            if (!s_bcpFactory.TryGetValue(type, out var func))
+            {
+                s_bcpFactory[type] = func = CreateBcpFactory(type);
+            }
             var obj = func?.Invoke(connection);
             return DynamicBulkCopy.Create(obj);
         }
@@ -50,7 +53,7 @@ namespace Dapper.ProviderTools
         //}
 
         private static readonly ConcurrentDictionary<Type, Func<DbConnection, object>?> s_bcpFactory
-            = new();
+            = new ConcurrentDictionary<Type, Func<DbConnection, object>?>();
 
         internal static Func<DbConnection, object>? CreateBcpFactory(Type connectionType)
         {
@@ -123,15 +126,15 @@ namespace Dapper.ProviderTools
         /// <summary>
         /// Enables or disables streaming from a data-reader
         /// </summary>
-        public virtual bool EnableStreaming { get; set; }
+        public bool EnableStreaming { get; set; }
         /// <summary>
         /// Number of rows in each batch
         /// </summary>
-        public virtual int BatchSize { get; set; }
+        public int BatchSize { get; set; }
         /// <summary>
         /// Number of seconds for the operation to complete before it times out.
         /// </summary>
-        public virtual int BulkCopyTimeout { get; set; }
+        public int BulkCopyTimeout { get; set; }
 
         /// <summary>
         /// Release any resources associated with this instance
